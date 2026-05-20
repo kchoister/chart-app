@@ -5,8 +5,8 @@ import { createOpenAI } from '@ai-sdk/openai';
 
 export const maxDuration = 60;
 
-export async function POST(req: NextRequest) {
-  const { prompt } = await req.json();
+async function chartWorkflow(prompt: string) {
+  'use workflow';
 
   const openai = createOpenAI({
     baseURL: 'https://ai-gateway.vercel.sh/v1',
@@ -25,5 +25,11 @@ export async function POST(req: NextRequest) {
   const output = await result.stdout();
   await sandbox.stop();
 
-  return NextResponse.json({ output, code });
+  return { output, code };
+}
+
+export async function POST(req: NextRequest) {
+  const { prompt } = await req.json();
+  const result = await chartWorkflow(prompt);
+  return NextResponse.json(result);
 }
