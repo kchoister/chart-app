@@ -1,22 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { start } from 'workflow/api';
 import { sandboxStep } from '../../../workflows/chart';
-import { createOpenAI } from '@ai-sdk/openai';
-import { generateText } from 'ai';
+import { Sandbox } from '@vercel/sandbox';
 
 export const maxDuration = 60;
 
+const CHART_CODE = `
+import math
+width = 70
+height = 20
+scale = height / 2
+for y in range(height):
+    line = ""
+    for x in range(width):
+        sine_value = math.sin(2 * math.pi * x / width)
+        plot_y = scale - int(sine_value * scale)
+        line += '*' if plot_y == y else ' '
+    print(line)
+`;
+
 export async function POST(req: NextRequest) {
   const { prompt } = await req.json();
-  const openai = createOpenAI({
-    baseURL: 'https://ai-gateway.vercel.sh/v1',
-    apiKey: process.env.AI_GATEWAY_TOKEN,
-  });
-  const { text: code } = await generateText({
-    model: openai('gpt-4o-mini'),
-    system: 'Return ONLY executable Python code using standard library. Print a text chart. No markdown, no backticks.',
-    prompt,
-  });
-  const run = await start(sandboxStep, [code]);
-  return NextResponse.json({ output: `Workflow started: ${run.runId}`, code });
+
+  start(sandboxStep, [CHART_CODE]);
+
+  const sandbox = await Sandbox.create({ runtime: 'python3.13' });
+  await sandbox.runCommand('bash', ['-c', `cat > /tmp/chart.py << 'EOF'\n${CHART_CODE}\nEOF`]);
+  const result = await sandbox.runCommand('python3', ['/tmp/chart.py']);
+  const output = await result.stdout();
+  await sandbox.stop();
+
+  return NextResponse.json({ output, code: CHART_CODE });
 }
